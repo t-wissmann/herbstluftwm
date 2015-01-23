@@ -16,6 +16,8 @@
 #include "tag.h"
 #include "floating.h"
 
+#include <memory>
+
 #define LAYOUT_DUMP_BRACKETS "()" /* must consist of exactly two chars */
 #define LAYOUT_DUMP_WHITESPACES " \t\n" /* must be at least one char */
 #define LAYOUT_DUMP_SEPARATOR_STR ":" /* must be a string with one char */
@@ -59,43 +61,167 @@ typedef int (*ClientAction)(HSClient*, void* data);
 
 #define FRACTION_UNIT 10000
 
-struct HSFrame;
 struct HSSlice;
 struct HSTag;
+class HSFrameLeaf;
+class HSFrameSplit;
 
-typedef struct HSLayout {
-    int align;         // ALIGN_VERTICAL or ALIGN_HORIZONTAL
-    struct HSFrame* a; // first child
-    struct HSFrame* b; // second child
-    int selection;
-    int fraction; // size of first child relative to whole size
-                  // FRACTION_UNIT means full size
-                  // FRACTION_UNIT/2 means 50%
-} HSLayout;
+class HSFrame : public std::enable_shared_from_this<HSFrame> {
+protected:
+    HSFrame(struct HSTag* tag, std::weak_ptr<HSFrameSplit> parent);
+    virtual ~HSFrame();
+public:
+    virtual void insertClient(HSClient* client) = 0;
+    virtual std::shared_ptr<HSFrame> lookup(const char* path) = 0;
+    virtual std::shared_ptr<HSFrameLeaf> frameWithClient(HSClient* client) = 0;
+    virtual bool removeClient(HSClient* client) = 0;
+    virtual void dump(Output output) = 0;
 
-typedef struct HSFrame {
-    union {
-        HSLayout layout;
-        struct {
-            HSClient** buf;
-            size_t  count;
-            int     selection;
-            int     layout;
-        } clients;
-    } content;
-    int type;
-    struct HSFrame* parent;
-    struct HSTag*   tag;
-    struct HSSlice* slice;
+    virtual void applyFloatingLayout(HSMonitor* m) = 0;
+    virtual bool isFocused() = 0;
+    virtual std::shared_ptr<HSFrameLeaf> getFocusedFrame() = 0;
+    virtual void applyLayout(herbstluft::Rectangle rect) = 0;
+    virtual bool focusClient(HSClient* client) = 0;
+    virtual HSClient* focusedClient() = 0;
+
+    // do recursive for each element of the (binary) frame tree
+    // if order <= 0 -> action(node); action(left); action(right);
+    // if order == 1 -> action(left); action(node); action(right);
+    // if order >= 2 -> action(left); action(right); action(node);
+    virtual void fmap(void (*onSplit)(HSFrameSplit*), void (*onLeaf)(HSFrameLeaf*), int order) = 0;
+
+    void updateVisibility();
+    std::shared_ptr<HSFrameSplit> getParent() { return parent.lock(); };
+    std::shared_ptr<HSFrame> root();
+    virtual std::shared_ptr<HSFrameSplit> isSplit() { return std::shared_ptr<HSFrameSplit>(); };
+    virtual std::shared_ptr<HSFrameLeaf> isLeaf() { return std::shared_ptr<HSFrameLeaf>(); };
+    // count the number of splits to the root with alignment "align"
+    virtual int splitsToRoot(int align);
+
+    HSTag* getTag() { return tag; };
+
+    void setVisibleRecursive(bool visible);
+
+    static std::shared_ptr<HSFrameLeaf> getGloballyFocusedFrame();
+
+    friend class HSFrameSplit;
+protected:
+    HSTag*   tag;
+    std::weak_ptr<HSFrameSplit> parent;
+};
+
+class HSFrameLeaf : public HSFrame {
+public:
+    HSFrameLeaf(struct HSTag* tag, std::weak_ptr<HSFrameSplit> parent);
+    virtual ~HSFrameLeaf();
+
+    // inherited:
+    void insertClient(HSClient* client);
+    std::shared_ptr<HSFrame> lookup(const char* path);
+    std::shared_ptr<HSFrameLeaf> frameWithClient(HSClient* client);
+    bool removeClient(HSClient* client);
+    void moveClient(int new_index);
+    void dump(Output output);
+
+    void applyFloatingLayout(HSMonitor* m);
+    bool isFocused();
+    std::shared_ptr<HSFrameLeaf> getFocusedFrame();
+    void applyLayout(herbstluft::Rectangle rect);
+    bool focusClient(HSClient* client);
+
+    void fmap(void (*onSplit)(HSFrameSplit*), void (*onLeaf)(HSFrameLeaf*), int order);
+
+
+    // own members
+    void setSelection(int idx);
+    void select(HSClient* client);
+    void cycleSelection(int delta);
+    void addClients(const std::vector<HSClient*>& vec);
+
+
+    HSClient* focusedClient();
+
+    bool split(int alignment, int fraction, int childrenLeaving = 0);
+    int getLayout() { return layout; };
+    void setLayout(int l) { layout = l; };
+    int getSelection() { return selection; };
+    size_t clientCount() { return clients.size(); };
+    std::shared_ptr<HSFrame> neighbour(char direction);
+    std::vector<HSClient*> removeAllClients();
+
+    std::shared_ptr<HSFrameLeaf> thisLeaf();
+    std::shared_ptr<HSFrameLeaf> isLeaf() { return thisLeaf(); };
+
+    friend class HSFrame;
+    void setVisible(bool visible);
+    herbstluft::Rectangle lastRect() { return last_rect; };
+private:
+    // layout algorithms
+    void layoutLinear(herbstluft::Rectangle rect, bool vertical);
+    void layoutHorizontal(herbstluft::Rectangle rect) { layoutLinear(rect, false); };
+    void layoutVertical(herbstluft::Rectangle rect) { layoutLinear(rect, true); };
+    void layoutMax(herbstluft::Rectangle rect);
+    void layoutGrid(herbstluft::Rectangle rect);
+
+    // members
+    std::vector<HSClient*> clients;
+    int     selection;
+    int     layout;
+
+    HSSlice* slice;
     Window window;
     int    window_transparent;
     bool   window_visible;
     herbstluft::Rectangle  last_rect; // last rectangle when being drawn
-} HSFrame;
+};
 
+class HSFrameSplit : public HSFrame {
+public:
+    HSFrameSplit(struct HSTag* tag, std::weak_ptr<HSFrameSplit> parent, int align,
+                 std::shared_ptr<HSFrame> a, std::shared_ptr<HSFrame> b);
+    virtual ~HSFrameSplit();
+    // inherited:
+    void insertClient(HSClient* client);
+    std::shared_ptr<HSFrame> lookup(const char* path);
+    std::shared_ptr<HSFrameLeaf> frameWithClient(HSClient* client);
+    bool removeClient(HSClient* client);
+    void dump(Output output);
+
+    void applyFloatingLayout(HSMonitor* m);
+    bool isFocused();
+    std::shared_ptr<HSFrameLeaf> getFocusedFrame();
+    void applyLayout(herbstluft::Rectangle rect);
+    bool focusClient(HSClient* client);
+
+    void fmap(void (*onSplit)(HSFrameSplit*), void (*onLeaf)(HSFrameLeaf*), int order);
+
+    HSClient* focusedClient();
+
+    // own members
+    virtual int splitsToRoot(int align);
+    void replaceChild(std::shared_ptr<HSFrame> old, std::shared_ptr<HSFrame> newchild);
+    std::shared_ptr<HSFrame> firstChild() { return a; };
+    std::shared_ptr<HSFrame> secondChild() { return b; };
+    void swapChildren();
+    void adjustFraction(int delta);
+    std::shared_ptr<HSFrameSplit> thisSplit();
+    std::shared_ptr<HSFrameSplit> isSplit() { return thisSplit(); };
+    int getAlign() { return align; };
+    void rotate();
+    void swapSelection() { selection = 1 - selection; };
+    void setSelection(int s) { selection = s; };
+private:
+    int align;         // ALIGN_VERTICAL or ALIGN_HORIZONTAL
+    std::shared_ptr<HSFrame> a; // first child
+    std::shared_ptr<HSFrame> b; // second child
+
+    int selection;
+    int fraction; // size of first child relative to whole size
+                  // FRACTION_UNIT means full size
+                  // FRACTION_UNIT/2 means 50%
+};
 
 // globals
-extern HSFrame*    g_cur_frame; // currently selected frame
 extern int* g_frame_gap;
 extern int* g_window_gap;
 extern char* g_tree_style;
@@ -149,7 +275,7 @@ void frame_unfocus(); // unfocus currently focused window
 // get neighbour in a specific direction 'l' 'r' 'u' 'd' (left, right,...)
 // returns the neighbour or NULL if there is no one
 HSFrame* frame_neighbour(HSFrame* frame, char direction);
-int frame_inner_neighbour_index(HSFrame* frame, char direction);
+int frame_inner_neighbour_index(std::shared_ptr<HSFrameLeaf> frame, char direction);
 int frame_focus_command(int argc, char** argv, Output output);
 
 // follow selection to leaf and focus this frame
@@ -191,7 +317,7 @@ void frame_update_border(Window window, unsigned long color);
 int frame_focus_edge(int argc, char** argv, Output output);
 int frame_move_window_edge(int argc, char** argv, Output output);
 
-bool smart_window_surroundings_active(HSFrame* frame);
+bool smart_window_surroundings_active(HSFrameLeaf* frame);
 
 #endif
 

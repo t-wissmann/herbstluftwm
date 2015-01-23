@@ -96,7 +96,7 @@ void monitor_apply_layout(HSMonitor* monitor) {
         rect.width -= (monitor->pad_left + monitor->pad_right);
         rect.y += monitor->pad_up;
         rect.height -= (monitor->pad_up + monitor->pad_down);
-        if (!*g_smart_frame_surroundings || monitor->tag->frame->type == TYPE_FRAMES ) {
+        if (!*g_smart_frame_surroundings || monitor->tag->frame->isSplit()) {
             // apply frame gap
             rect.x += *g_frame_gap;
             rect.y += *g_frame_gap;
@@ -755,19 +755,15 @@ void ensure_monitors_are_available() {
             DisplayHeight(g_display, DefaultScreen(g_display))};
     ensure_tags_are_available();
     // add monitor with first tag
-    HSMonitor* m = add_monitor(rect, get_tag_by_index(0), NULL);
+    add_monitor(rect, get_tag_by_index(0), NULL);
     g_cur_monitor = 0;
-    g_cur_frame = m->tag->frame;
 
     monitor_update_focus_objects();
 }
 
 HSMonitor* monitor_with_frame(HSFrame* frame) {
     // find toplevel Frame
-    while (frame->parent) {
-        frame = frame->parent;
-    }
-    HSTag* tag = find_tag_with_toplevel_frame(frame);
+    HSTag* tag = find_tag_with_toplevel_frame(&* frame->root());
     return find_monitor_with_tag(tag);
 }
 
