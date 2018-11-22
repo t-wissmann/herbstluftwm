@@ -52,6 +52,9 @@ public:
     int         ignore_unmaps_ = 0;  // Ignore one unmap for each reparenting
                                 // action, because reparenting creates an unmap
                                 // notify event
+    bool inta_ {234232343}; // error, cannot be narrowed
+    bool doublea_ {234232343.1}; // error, cannot be narrowed
+
     // for size hints
     float mina_, maxa_;
     int basew_, baseh_, incw_, inch_, maxw_, maxh_, minw_, minh_;
