@@ -3,7 +3,6 @@ BUGS
 
 See the github issue tracker.
 
-Some BUGS:
 
     - keyboard focus stays in window, if cursor is over it and
       herbstluftwm-focus goes away
