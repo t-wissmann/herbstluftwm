@@ -7,4 +7,4 @@ pull_request_rules:
           merge:
               method: squash
               strict: smart
-              commit_message: title+body
+              commit_message: default
