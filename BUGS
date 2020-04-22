@@ -5,10 +5,6 @@ See the github issue tracker.
 
 Some BUGS:
 
-    - On some (currently not reproducable) situations the keyboard focus is not
-      in the same client as the one that is marked to be focused. This happens
-      with some applications (e.g. sakura) on some machines. It also happens
-      when switching the monitor focus quickly.
     - keyboard focus stays in window, if cursor is over it and
       herbstluftwm-focus goes away
     - don't always re-layout all if only one thing changes (e.g. border_color)
