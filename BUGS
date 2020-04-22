@@ -3,8 +3,6 @@ BUGS
 
 See the github issue tracker.
 
-    - don't call monitor_apply_layout() if only the focus changes, e.g. on an
-      enternotify event.
     - herbstclient: add timeout if server does not respond
     - herbstclient: errorstatus2string2stderr
     - add function to put window into tag (and use it in manage, merge_tag,
