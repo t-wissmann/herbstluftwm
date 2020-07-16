@@ -2,8 +2,6 @@ pull_request_rules:
     - name: automatic merge on CI success and review
       conditions:
           - base=master
-          - status-success=Travis CI - Pull Request
-          - "#approved-reviews-by>=1"
           - label≠wip
       actions:
           merge:
