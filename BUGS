@@ -1,8 +1,6 @@
 BUGS
 ====
 
-Some BUGS:
-
     - On some (currently not reproducable) situations the keyboard focus is not
       in the same client as the one that is marked to be focused. This happens
       with some applications (e.g. sakura) on some machines. It also happens
